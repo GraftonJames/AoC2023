@@ -1,5 +1,5 @@
 use std::cmp;
-use std::io::Write;
+use std::thread::panicking;
 use std::{
     collections::HashMap,
     fs::File,
@@ -12,70 +12,78 @@ fn main() {
     day_three();
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Engine {
     Empty,
-    Symbol,
+    Part(Part),
     Digit(u32),
 }
 
-fn day_three() {
+#[derive(PartialEq, Clone)]
+enum Part {
+    Gear,
+    Other,
+}
 
+struct SchemeNum {
+    x: usize,
+    y: usize,
+    len: usize,
+    engine: Engine,
+}
+
+fn day_three() {
     let stream = get_file_stream(String::from("engine_scheme"));
     let scheme: Vec<Vec<Engine>> = stream
         .lines()
         .map(|l| map_engine_string_to_engine(l.unwrap()))
         .collect();
-    let mut head: (usize, usize, bool) = (0, 0, false);
-    let mut tail: (usize, usize) = (0, 0);
 
-    let mut sum = 0;
+    let scheme = collect_scheme(scheme);
+}
 
-    for x in 0..(scheme.len() - 1) {
-        for y in 0..(scheme[x].len()) {
-            match scheme[x][y] {
-                Engine::Digit(_n) => {
-                    if tail != (x.checked_sub(1).unwrap_or(0), y.checked_sub(1).unwrap_or(0)) {
-                        head = (x, y, false);
-                    }
+fn collect_scheme(scheme: Vec<Vec<Engine>>) -> Vec<Vec<SchemeNum>> {
+    scheme
+        .into_iter()
+        .enumerate()
+        .map(|(i, l)| collect_scheme_line(l, i))
+        .collect()
+}
 
-                    tail = (x, y);
-                    
-                    if
-                        scheme[x-1][y-1] == Engine::Symbol ||
-                        scheme[x-1][y] == Engine::Symbol ||
-                        scheme[x-1][y+1] == Engine::Symbol ||
-                        scheme[x][y-1] == Engine::Symbol ||
-                        scheme[x][y] == Engine::Symbol ||
-                        scheme[x+1][y+1] == Engine::Symbol ||
-                        scheme[x+1][y] == Engine::Symbol ||
-                        scheme[x+1][y-1] == Engine::Symbol
-                    {
-                        match scheme[x][y + 1] {
-                            Engine::Digit(_) => (),
-                            _ => {
-                                sum += get_num_from_scheme(head, tail, &scheme);
-                            },
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
+fn collect_scheme_line(scheme_line: Vec<Engine>, index: usize) -> Vec<SchemeNum> {
+    let mut iter = scheme_line.iter().enumerate();
+    let mut output: Vec<SchemeNum> = vec![];
+
+    while let Some(e) = iter.find(|&e| match e.1 {
+        Engine::Digit(_) => true,
+        _ => false,
+    }) {
+        output.push(get_number_from_scheme_line(&scheme_line[e.0..], (index, e.0)));
+        iter.find(|&e| match e.1 {
+            Engine::Digit(_) => false,
+            _ => true,
+        });
     }
 
-    for line in scheme {
-        for place in line {
-            match place {
-                Engine::Empty => print!("."),
-                Engine::Symbol => print!("#"),
-                Engine::Digit(n) => print!("{n}"),
-            }
-        }
-        print!("\n");
+    output
+}
+
+fn get_number_from_scheme_line(slice: &[Engine], (x, y): (usize, usize)) -> SchemeNum {
+    let mut iter = slice.iter();
+
+    let mut acc = 0;
+    let mut len = 0;
+    while let Engine::Digit(n) = iter.next().unwrap_or(&Engine::Empty) {
+        acc = acc * 10 + n;
+        len += 1;
     }
 
-    print!("day three: {sum}");
+    SchemeNum {
+        x,
+        y,
+        len,
+        engine: Engine::Digit(acc),
+    }
 }
 
 fn get_num_from_scheme(
@@ -84,13 +92,18 @@ fn get_num_from_scheme(
     scheme: &Vec<Vec<Engine>>,
 ) -> u32 {
     let mut total = 0;
-    for i in 0..(head.1 - tail.1) {
+    let mut place = 1;
+
+    print!("{},{}:", head.0, head.1);
+
+    for i in (head.1..(tail.1 + 1)).rev() {
         match scheme[head.0][i] {
-            Engine::Digit(n) => total += n,
+            Engine::Digit(n) => total += n * place,
             _ => (),
         }
+        place *= 10;
     }
-
+    print!("{total}");
     total
 }
 
@@ -99,9 +112,8 @@ fn map_engine_string_to_engine(line: String) -> Vec<Engine> {
         .into_iter()
         .map(|c| match c {
             '.' => Engine::Empty,
-            '*' | '&' | '#' | '+' | '/' | '=' | '-' | '\\' | '@' | '%' | '$' => {
-                return Engine::Symbol
-            }
+            '*' => Engine::Part(Part::Gear),
+            '&' | '#' | '+' | '/' | '=' | '-' | '\\' | '@' | '%' | '$' => Engine::Part(Part::Other),
             n => Engine::Digit(n.to_digit(10).unwrap()),
         })
         .collect()
@@ -116,7 +128,7 @@ fn day_two() {
     let real_result = result
         .into_iter()
         .fold(0, |acc, r| acc + game_is_impossible_id_total_for_day(r));
-    print!("day two answer: {}", real_result);
+    print!("day two answer: {}\n", real_result);
 }
 
 struct CubeGame {
