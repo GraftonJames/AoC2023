@@ -10,10 +10,6 @@ pub fn day_four() {
 
     for card_index in 0..card_stack.len() {
         let count = count_card_points(&card_stack[card_index]);
-        print!(
-            "game {}:{} * {}\n",
-            card_index, count, card_stack[card_index].0
-        );
         for i in 1..=count {
             card_stack[card_index + i].0 += card_stack[card_index].0;
         }
